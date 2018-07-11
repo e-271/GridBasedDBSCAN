@@ -2,7 +2,7 @@
 Grid-based DBSCAN + Time filter
 Author: Esther Robb
 
-This is the slower implementation of Grid-based DBSCAN.
+This is the simple/slower implementation of Grid-based DBSCAN.
 It uses an array of radar data points in this format:
 [beam_number, gate_number, time_secs]
 e.g.,
