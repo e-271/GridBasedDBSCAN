@@ -28,7 +28,6 @@ class GridBasedDBSCAN():
                 self.C[i,j] = self._calculate_ratio(dr, dtheta, i, j, r_init=r_init)
         self.gate_eps = gate_eps
         self.beam_eps = beam_eps
-        #self.time_eps = time_eps
         self.min_pts = min_pts
 
 
@@ -40,17 +39,19 @@ class GridBasedDBSCAN():
         return in_ellipse
 
 
-    def _region_query(self, m, point_id, eps):
+    def _region_query(self, m, point_id):
         n_points = m.shape[1]
         seeds = []
+        gate, beam = m[0, point_id], m[1, point_id]
+        eps = (self.gate_eps, self.beam_eps / self.C[gate, beam])
         for i in range(0, n_points):
             if self._eps_neighborhood(m[:, point_id], m[:, i], eps):
                 seeds.append(i)
         return seeds
 
 
-    def _expand_cluster(self, m, classifications, point_id, cluster_id, eps, min_points):
-        seeds = self._region_query(m, point_id, eps)
+    def _expand_cluster(self, m, classifications, point_id, cluster_id, min_points):
+        seeds = self._region_query(m, point_id)
         if len(seeds) < min_points:
             classifications[point_id] = NOISE
             return False
@@ -61,7 +62,8 @@ class GridBasedDBSCAN():
 
             while len(seeds) > 0:
                 current_point = seeds[0]
-                results = self._region_query(m, current_point, eps)
+                #eps = (self.gate_eps, self.beam_eps / C[current_point[0], current_point[1]])
+                results = self._region_query(m, current_point)
                 if len(results) >= min_points:
                     for i in range(0, len(results)):
                         result_point = results[i]
@@ -76,8 +78,6 @@ class GridBasedDBSCAN():
 
     # Input for grid-based DBSCAN:
     # C matrix calculated based on sensor data.
-    # Based on Birant et al
-    # TODO why does this make a matrix if it doesn't vary from beam to beam
     def _calculate_ratio(self, dr, dt, i, j, r_init=0):
         r_init, dr, dt, i, j = float(r_init), float(dr), float(dt), float(i), float(j)
         cij = (r_init + dr * i) / (2.0 * dr) * (np.sin(dt * (j + 1.0) - dt * j) + np.sin(dt * j - dt * (j - 1.0)))
@@ -103,10 +103,9 @@ class GridBasedDBSCAN():
             point = m[:, point_id]
             i, j = int(point[0]), int(point[1]) # range gate, beam
             wid = g / (f * self.C[i, j])
-            eps = (self.gate_eps, wid)
             # Adaptively change one of the epsilon values and the min_points parameter using the C matrix
             if classifications[point_id] == UNCLASSIFIED:
-                if self._expand_cluster(m, classifications, point_id, cluster_id, eps, self.min_pts):
+                if self._expand_cluster(m, classifications, point_id, cluster_id, self.min_pts):
                     cluster_id = cluster_id + 1
         return classifications
 
@@ -116,8 +115,8 @@ if __name__ == '__main__':
     nbeam = 16
     gate = np.random.randint(low=0, high=nrang-1, size=100)
     beam = np.random.randint(low=0, high=nbeam-1, size=100)
-    gate_eps = 3
-    beam_eps = 3
+    gate_eps = 5
+    beam_eps = 5
     min_pts = 4
 
     dr = 45
