@@ -87,9 +87,7 @@ class GridBasedDBSCAN():
     def fit(self, m):
         """
         Inputs:
-        m - A matrix whose rows are [gate, beam, time]
-        eps - Maximum distance two points can be to be regionally related
-        min_points - The minimum number of points to make a cluster
+        m - A matrix whose rows are [gate, beam]
 
         Outputs:
         An array with either a cluster id number or dbscan.NOISE (-1) for each
