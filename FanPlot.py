@@ -3,8 +3,6 @@ import matplotlib.pyplot as plt
 from matplotlib import patches
 from matplotlib.dates import num2date
 
-#TODO slate to add to utilities
-
 class FanPlot:
 
     def __init__(self, nrange=75, nbeam=16, r0=180, dr=45, dtheta=3.24):
