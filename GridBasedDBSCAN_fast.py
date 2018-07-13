@@ -8,6 +8,8 @@ The data structure is why it is able to run faster - instead of checking all poi
 find neighbors, it only checks adjacent points.
 """
 
+#TODO incomplete implementation
+
 import numpy as np
 
 UNCLASSIFIED = False

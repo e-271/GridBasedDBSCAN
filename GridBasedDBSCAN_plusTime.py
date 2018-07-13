@@ -13,6 +13,7 @@ The search area will be an ellipse in the spatial dimensions and an elliptic cyl
 If you want an ellipsoid search area in space+time dimensions, uncomment the corresponding code in _eps_neighborhood
 """
 
+#TODO incomplete implementation
 
 import numpy as np
 
