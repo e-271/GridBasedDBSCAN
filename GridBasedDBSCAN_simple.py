@@ -138,9 +138,10 @@ if __name__ == '__main__':
     """
     """ Real radar data """
     import pickle
-    data = pickle.load(open("sas_2-7-18_scan0.pickle", 'rb'))
-    gate = data[0,:]
-    beam = data[1,:]
+    data = pickle.load(open("./sas_2018-02-07_grid.pickle", 'rb'))
+    gate = data[0][0,:].astype(int)
+    beam = data[0][1,:].astype(int)
+    data = data[0]
 
     """ Grid-based DBSCAN """
     gdb = GridBasedDBSCAN(f, g, pts_ratio, nrang, nbeam, dr, dtheta, r_init)

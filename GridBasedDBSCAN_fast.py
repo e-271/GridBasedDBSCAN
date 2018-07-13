@@ -6,9 +6,10 @@ This is the fast implementation of Grid-based DBSCAN.
 It uses a sparse Boolean array of data of size (num_grids) x (num_beams)
 The data structure is why it is able to run faster - instead of checking all points to
 find neighbors, it only checks adjacent points.
-"""
 
-#TODO incomplete implementation
+Complete implementation.
+Confirmed to give the same output as GridBasedDBSCAN_simple.py.
+"""
 
 import numpy as np
 
@@ -18,17 +19,16 @@ NOISE = -1
 
 class GridBasedDBSCAN():
 
-    def __init__(self, gate_eps, beam_eps, time_eps, min_pts, ngate, nbeam, dr, dtheta, r_init=0):
+    def __init__(self, f, g, pts_ratio, ngate, nbeam, dr, dtheta, r_init=0):
         dtheta = dtheta * np.pi / 180.0
         self.C = np.zeros((ngate, nbeam))
-        for g in range(ngate):
-            for b in range(nbeam):
+        for gate in range(ngate):
+            for beam in range(nbeam):
                 # This is the ratio between radial and angular distance for each point. Across a row it's all the same, consider removing j.
-                self.C[g,b] = self._calculate_ratio(dr, dtheta, g, b, r_init=r_init)
-        self.gate_eps = gate_eps
-        self.beam_eps = beam_eps
-        self.time_eps = time_eps
-        self.min_pts = min_pts
+                self.C[gate, beam] = self._calculate_ratio(dr, dtheta, gate, beam, r_init=r_init)
+        self.g = g
+        self.f = f
+        self.pts_ratio = pts_ratio
         self.ngate = ngate
         self.nbeam = nbeam
 
@@ -44,25 +44,24 @@ class GridBasedDBSCAN():
 
     def _region_query(self, m, grid_id):
         seeds = []
-        hgt = self.gate_eps        #TODO should there be some rounding happening to accomidate discrete gate/wid?
-        wid = self.beam_eps / self.C[grid_id[0], grid_id[1]]
+        hgt = self.g        #TODO should there be some rounding happening to accomidate discrete gate/wid?
+        wid = self.g / (self.f * self.C[grid_id[0], grid_id[1]])
         ciel_hgt = int(np.ceil(hgt))
         ciel_wid = int(np.ceil(wid))
 
         # Check for neighbors in a box of shape ciel(2*wid), ciel(2*hgt) around the point
         g_min, g_max = max(0, grid_id[0] - ciel_hgt), min(self.ngate, grid_id[0] + ciel_hgt + 1)
         b_min, b_max = max(0, grid_id[1] - ciel_wid), min(self.nbeam, grid_id[1] + ciel_wid + 1)
+        possible_pts = 0
         for g in range(g_min, g_max):
             for b in range(b_min, b_max):
                 new_id = (g, b)
-                # Skip ahead if no point is found at this index
-                if not m[new_id]:
-                    continue
                 # Add the new point only if it falls within the ellipse defined by wid, hgt
                 if self._in_ellipse(new_id, grid_id, hgt, wid):
-                    seeds.append(new_id)
-
-        return seeds
+                    possible_pts += 1
+                    if m[new_id]:   # Add the point to seeds only if there is a 1 in the sparse matrix there
+                        seeds.append(new_id)
+        return seeds, possible_pts
 
 
     def _in_ellipse(self, p, q, hgt, wid):
@@ -70,8 +69,9 @@ class GridBasedDBSCAN():
 
 
     def _expand_cluster(self, m, classifications, grid_id, cluster_id, min_points):
-        seeds = self._region_query(m, grid_id)
-        if len(seeds) < min_points:
+        seeds, possible_pts = self._region_query(m, grid_id)
+        k = possible_pts * self.pts_ratio
+        if len(seeds) < k:
             classifications[grid_id] = NOISE
             return False
         else:
@@ -81,9 +81,9 @@ class GridBasedDBSCAN():
 
             while len(seeds) > 0:
                 current_point = seeds[0]
-                results = self._region_query(m, current_point)
-                eps = self.gate_eps, self.beam_eps / self.C[current_point[0], current_point[1]]
-                if len(results) >= min_points:
+                results, possible_pts = self._region_query(m, current_point)
+                k = possible_pts * self.pts_ratio
+                if len(results) >= k:
                     for i in range(0, len(results)):
                         result_point = results[i]
                         if classifications[result_point] == UNCLASSIFIED or classifications[result_point] == NOISE:
@@ -98,8 +98,7 @@ class GridBasedDBSCAN():
         """
         Inputs:
         m - A csr_sparse bool matrix, num_gates x num_beams x num_times
-        eps - Maximum distance two points can be to be regionally related
-        min_points - The minimum number of points to make a cluster
+        m_i - indices where data can be found in the sparse matrix
 
         Outputs:
         An array with either a cluster id number or dbscan.NOISE (-1) for each
@@ -108,16 +107,14 @@ class GridBasedDBSCAN():
         self.m = m
         self.m_i = m_i
 
-        g, f = self.beam_eps, 1
         cluster_id = 1
-        n_points = len(m_i)
         classifications = np.zeros(m.shape).astype(int) #TODO sparsify
         classifications[:, :] = UNCLASSIFIED
 
         for grid_id in m_i:
             # Adaptively change one of the epsilon values and the min_points parameter using the C matrix
             if classifications[grid_id] == UNCLASSIFIED:
-                if self._expand_cluster(m, classifications, grid_id, cluster_id, self.min_pts):
+                if self._expand_cluster(m, classifications, grid_id, cluster_id, self.pts_ratio):
                     cluster_id = cluster_id + 1
 
         point_labels = [classifications[grid_id] for grid_id in m_i]
@@ -125,27 +122,32 @@ class GridBasedDBSCAN():
 
 
 if __name__ == '__main__':
-    from scipy import sparse
     ngate = 75
     nbeam = 16
-    pts_per_time = 78
-    np.random.seed(2)
-
-    beam = np.random.randint(low=0, high=nbeam - 1, size=pts_per_time)
-    gate = np.random.randint(low=0, high=ngate - 1, size=pts_per_time)
-    data = sparse.csr_matrix((np.array([True]*pts_per_time), (gate, beam)), shape=(ngate, nbeam))
-    data_indices = list(zip(gate, beam))
-
-    gate_eps = 5
-    beam_eps = 5
-    time_eps = 10
-    min_pts = 4
-
+    g = 4               #  (g/f >= 5) prevents (w[i,j] = g / f * C[i,j]) from dropping below 1 with the other settings
+    f = 1               #  but the results from dont make me happy
+    pts_ratio = 0.3
     dr = 45
     dtheta = 3.3
     r_init = 180
 
-    gdb = GridBasedDBSCAN(gate_eps, beam_eps, time_eps, min_pts, ngate, nbeam, dr, dtheta, r_init)
+
+    """ Fake data 
+    gate = np.random.randint(low=0, high=nrang-1, size=100)
+    beam = np.random.randint(low=0, high=nbeam-1, size=100)
+    data = np.row_stack((gate, beam))
+    """
+    """ Real radar data """
+    import pickle
+    data = pickle.load(open("./sas_2018-02-07_grid.pickle", 'rb'))
+    gate = data[0][0,:].astype(int)
+    beam = data[0][1,:].astype(int)
+
+    from scipy import sparse
+    data = sparse.csr_matrix((np.array([True]*len(gate)), (gate, beam)), shape=(ngate, nbeam))
+    data_indices = list(zip(gate, beam))
+
+    gdb = GridBasedDBSCAN(f, g, pts_ratio, ngate, nbeam, dr, dtheta, r_init)
     labels = gdb.fit(data, data_indices)
 
     from FanPlot import FanPlot
